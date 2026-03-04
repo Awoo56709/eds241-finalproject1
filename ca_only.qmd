@@ -1,0 +1,214 @@
+---
+title: "Do Sea‑Level Rise Maps Backfire? A California‑Focused Causal Tutorial"
+format: html
+editor: visual
+---
+
+# Do Sea‑Level Rise Maps Backfire? A California‑Focused Causal Tutorial
+
+## Background
+
+Sea‑level rise (SLR) is one of California’s most pressing climate risks. Yet even in a climate‑aware state, public concern about SLR remains surprisingly low. Mildenberger et al. (2024) test whether personalized SLR maps, the kind used by governments and advocacy groups actually increase concern by showing residents how rising seas could affect their homes.
+
+The surprising finding: Maps often reduce perceived personal harm, even for people whose homes are projected to flood.
+
+This blog post walks through the design‑based causal method used in the study and recreates the California‑only version of Figure 4, which shows how the map’s treatment effect varies with distance from the SLR boundary.
+
+# Study Design
+
+## Randomized experiment
+
+Respondents in California were recruited using address‑level mail‑to‑web sampling. Each respondent was randomly assigned to:
+
+Treatment (treat_map = 1): See a customized SLR map centered on their home
+
+Control (treat_map = 0): See no map
+
+Because treatment is randomized, the difference in outcomes between treated and control respondents is a causal estimate of the map’s effect.
+
+# Outcome variable
+
+We focus on:
+
+dv_personal — perceived personal harm from SLR (0–3 scale)
+
+Running variable To recreate Figure 4, we use:
+
+dist_min — distance (meters) from the SLR boundary
+
+negative = inside projected flood zone
+
+positive = outside projected flood zone
+
+This running variable is used to estimate spatial heterogeneity in the treatment effect.
+
+# Causal Identification Strategy
+
+Randomized experiment is Average Treatment Effect (ATE) Because map exposure is randomly assigned, the causal effect is simply:
+
+### (add the studies formula here)
+
+Spatial heterogeneity (Figure 4 logic) To understand whether the map works differently for people closer to the flood zone, the authors:
+
+Bin respondents into 50‑meter intervals of distance to the SLR boundary
+
+Estimate the treatment effect within each bin
+
+Plot those bin‑specific effects against distance
+
+This is not a formal regression discontinuity design, but it borrows RD intuition:
+
+If the map increases personal relevance, the treatment effect should be strongest near the boundary.
+
+Instead, the effect is negative everywhere.
+
+# Load and Clean California Data
+
+```{r}
+library(tidyverse)
+library(broom)
+library(estimatr)
+
+# Load CA survey data
+data_ca <- read_csv("data/SeaLevelRiseSurvey_California_January+16,+2021_13.54.csv") %>%
+  .[-c(1,2),] %>%
+  mutate(geo = "CA")
+
+# Load CA distance-to-boundary file
+dist_ca <- read_csv("data/ca_dist_mins.csv")
+
+# Load CA combined metadata
+cw_ca <- read_csv("data/ca_combined_final_withtraffic_sub.csv")
+
+# Load flood zone file
+fld_zone <- read.csv("data/fld_zone.csv")
+
+```
+
+# Merge Survey, Distance and Flood Zone
+
+```{r}
+dist_ca_clean <- dist_ca %>%
+  filter(!duplicated(.)) %>%
+  group_by(adds) %>%
+  filter(dist_min == min(dist_min)) %>%
+  inner_join(
+    cw_ca %>% select(adds, email, FID) %>% filter(!duplicated(.)),
+    by = "adds"
+  ) %>%
+  rename(RecipientEmail = email) %>%
+  inner_join(
+    fld_zone %>% select(adds, COUNTYFP, TRACTCE, FLD_ZONE) %>% filter(!duplicated(.)),
+    by = "adds"
+  )
+
+```
+
+# Construct California Only Analytic Dataset
+
+```{r}
+dv_recode <- function(x){
+  case_when(
+    x == "Not at all" ~ 0,
+    x == "Only a little" ~ 1,
+    x == "A moderate amount" ~ 2,
+    x == "A great deal" ~ 3
+  )
+}
+
+data_ca_clean <- data_ca %>%
+  left_join(dist_ca_clean, by = "RecipientEmail") %>%
+  mutate(
+    treat_map = !is.na(exp_emphasis),
+    slr = str_detect(img, "SLR"),
+    dv_personal = dv_recode(slharmpersonal),
+    dist_min = ifelse(slr == TRUE, -dist_min, dist_min)
+  ) %>%
+  filter(!is.na(dv_personal), !is.na(dist_min))
+
+```
+
+# Step 1 - Estimate the ATE of California
+
+```{r}
+mod_ate <- lm_robust(dv_personal ~ treat_map, se_type = "HC1", data = data_ca_clean)
+summary(mod_ate)
+
+```
+
+# Step 2 — Recreate Figure 4
+
+```{r}
+bin_width <- 50
+
+data_ca_binned <- data_ca_clean %>%
+  mutate(
+    dist_bin = bin_width * round(dist_min / bin_width),
+    dist_bin = pmax(pmin(dist_bin, 500), -500)
+  )
+
+```
+
+# Step 3 - Estimate treatment effect within each bin
+
+```{r}
+effects_ca <- data_ca_binned %>%
+  group_by(dist_bin) %>%
+  filter(n() >= 15) %>%
+  do(tidy(lm_robust(
+    dv_personal ~ treat_map,
+    se_type = "HC1",
+    data = .
+  ))) %>%
+  ungroup() %>%
+  filter(term == "treat_mapTRUE") %>%
+  mutate(
+    ci_low = estimate - 1.96 * std.error,
+    ci_high = estimate + 1.96 * std.error
+  )
+
+```
+
+# Step 4 - Plot California- Only Figure
+
+```{r}
+ggplot(effects_ca, aes(x = dist_bin, y = estimate)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 20, alpha = 0.6) +
+  geom_smooth(method = "loess", se = TRUE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Outcome: Sense of personal harm (California only)",
+    subtitle = "Treatment effect of map by distance from SLR boundary",
+    x = "Distance from SLR boundary (negative = inside SLR zone)",
+    y = "Treatment effect of map"
+  )
+
+```
+
+# Interpretation
+
+Three key insights emerge from the California analysis:
+
+Maps reduce perceived personal harm across almost all distances.\
+Even respondents whose homes are projected to flood show lower concern after seeing the map.
+
+There is no sharp change at the SLR boundary.\
+If maps increased personal relevance, we would expect a spike near 0 meters. Instead, the curve is flat and negative.
+
+California behaves like the national sample.\
+Despite higher climate awareness, the backfire effect persists.
+
+# Conclusion
+
+This study is a powerful example of design‑based causal inference:
+
+Randomization leads to unbiased treatment effect
+
+Spatial heterogeneity relates to mechanism exploration
+
+Simple models allow for transparent interpretation
+
+For policymakers, the takeaway is clear: SLR maps may unintentionally reduce concern, even among at‑risk households.
