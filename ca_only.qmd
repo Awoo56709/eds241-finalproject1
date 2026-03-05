@@ -1,18 +1,30 @@
 ---
 title: "Do Sea‑Level Rise Maps Backfire? A California‑Focused Causal Tutorial"
+author: 
+- name: "Joshua Ferrer-Lozano"
+- name: "Zach Loo"
+- name: "William Mullins"
+- name: "Sofia Sarak"
 format: html
 editor: visual
 ---
 
-# Do Sea‑Level Rise Maps Backfire? A California‑Focused Causal Tutorial
-
 ## Background
 
-Sea‑level rise (SLR) is one of California’s most pressing climate risks. Yet even in a climate‑aware state, public concern about SLR remains surprisingly low. Mildenberger et al. (2024) test whether personalized SLR maps, the kind used by governments and advocacy groups actually increase concern by showing residents how rising seas could affect their homes.
+Sea‑level rise (SLR) is one of California’s most pressing climate risks. Yet even in a climate‑aware state, public concern about SLR remains surprisingly low. Mildenberger et al. (2024) test whether personalized SLR maps increase resident concern by showing how rising seas could affect their home.
 
 The surprising finding: Maps often reduce perceived personal harm, even for people whose homes are projected to flood.
 
-This blog post walks through the design‑based causal method used in the study and recreates the California‑only version of Figure 4, which shows how the map’s treatment effect varies with distance from the SLR boundary.
+This blog post walks through the design‑based causal method used in the study and recreates the California‑only version of Figure 4, which shows how the map’s treatment effect varies with distance from the SLR boundary. The original study conducted this analysis on coastal communities of New Jersey, Florida, and Virginia, as well. Calfiornia data comes from the San Francisco Bay Area.
+
+```{r}
+#| eval: true
+#| echo: false
+#| fig-align: "center"
+#| out-width: "50%"
+
+knitr::include_graphics("images/figure4.png")
+```
 
 # Study Design
 
@@ -24,47 +36,52 @@ Treatment (treat_map = 1): See a customized SLR map centered on their home
 
 Control (treat_map = 0): See no map
 
-Because treatment is randomized, the difference in outcomes between treated and control respondents is a causal estimate of the map’s effect.
+Because treatment is randomized, the difference in outcomes between treated and control respondents is meant to be a causal estimate of the map’s effect.
 
-# Outcome variable
+Additionally, the study utilized a geographic risk discontuity design to test whether there was a difference in concern between respondents that were just within or just outside of the flood zone. Under these assumptions, these residents should be relatively similar in most covariates other than the risk to sea level rise. A jump in concern between groups on either side of the threshold would indicate a treatment effect.
 
-We focus on:
+## Outcome variable
 
-dv_personal — perceived personal harm from SLR (0–3 scale)
+`dv_personal` — The study measures perceived risk or personal harm from SLR using a 0-3 scale, which respondents selected in their surveys.
 
-Running variable To recreate Figure 4, we use:
+## Running variable
 
-dist_min — distance (meters) from the SLR boundary
+To recreate Figure 4, we use:
 
-negative = inside projected flood zone
-
-positive = outside projected flood zone
+`dist_min` — distance (meters) from the SLR boundary, where negative values correspond to homes inside the projected flood zone and positive ones outside of it.
 
 This running variable is used to estimate spatial heterogeneity in the treatment effect.
 
-# Causal Identification Strategy
+## Causal Identification Strategy
 
-Randomized experiment is Average Treatment Effect (ATE) Because map exposure is randomly assigned, the causal effect is simply:
+The randomized sample estimates an Average Treatment Effect (ATE). Because map exposure is randomly assigned, the causal effect is simply:
 
-### (add the studies formula here)
+::: {style="font-size: 0.8em; text-align: center;"}
+**ATE = mean outcome of those that received the SLR map - mean outcome of those that did not receive map**
+:::
 
-Spatial heterogeneity (Figure 4 logic) To understand whether the map works differently for people closer to the flood zone, the authors:
+Spatial heterogeneity/geographic risk discontinuity (Figure 4) is leveraged to understand whether the map works differently for people closer to the flood zone. The study does the following:
 
-Bin respondents into 50‑meter intervals of distance to the SLR boundary
+1.  Bin respondents into 50‑meter intervals of distance to the SLR boundary
 
-Estimate the treatment effect within each bin
+2.  Estimate the treatment effect within each bin
 
-Plot those bin‑specific effects against distance
+3.  Plot those bin‑specific effects against distance
 
-This is not a formal regression discontinuity design, but it borrows RD intuition:
+To reiterate, this is not a formal regression discontinuity design, but it borrows the intuition that if the map increases personal relevance, the treatment effect should be strongest near the boundary.
 
-If the map increases personal relevance, the treatment effect should be strongest near the boundary.
+## Study Result
 
-Instead, the effect is negative everywhere.
+The treatment effect is negative (reduces concern of SLR risk), regardless of geographic location.
 
-# Load and Clean California Data
+# Recreation of Results/Figure 4
+
+## Load and Clean California Data
 
 ```{r}
+#| message: false
+#| warning: false
+
 library(tidyverse)
 library(broom)
 library(estimatr)
@@ -85,28 +102,61 @@ fld_zone <- read.csv("data/fld_zone.csv")
 
 ```
 
-# Merge Survey, Distance and Flood Zone
+## Merge Survey, Distance and Flood Zone
 
 ```{r}
-dist_ca_clean <- dist_ca %>%
+#| warning: false
+
+dist_ca_clean <- dist_ca %>% 
+  
+  # Keep only the first occurrence of each duplicate
   filter(!duplicated(.)) %>%
+  
+  # Group by address
   group_by(adds) %>%
+  
+  # Keep observations only where the address corresponds to the minimum distance
+  # (For cases with address duplicates)
   filter(dist_min == min(dist_min)) %>%
+  
+  # Join traffic data on addresses, and retain corresponding emails and IDS
   inner_join(
     cw_ca %>% select(adds, email, FID) %>% filter(!duplicated(.)),
     by = "adds"
   ) %>%
+  
+  # Clean variable name
   rename(RecipientEmail = email) %>%
+  
+  # Join flood zone info on addresses, keeping county, tract, and flood zone info
   inner_join(
     fld_zone %>% select(adds, COUNTYFP, TRACTCE, FLD_ZONE) %>% filter(!duplicated(.)),
     by = "adds"
   )
-
 ```
 
-# Construct California Only Analytic Dataset
+In the analysis we are replicating in this blog post, traffic data is not used (but it used for another experiment in the same study, which is why it is included here).
+
+**Data Description:** This intermediary clean data frame contains the following columns:
+
+-   `adds` - Residential addresses where surveys were sent
+
+-   `dist_min` - The minimum distance to the SLR boundary
+
+-   `RecipientEmail` - Email address associated with recipient of survey
+
+-   `FID` - Feature IDs from the corresponding geospatial data set
+
+-   `COUNTYFP` - County identifier (there are 10 unique counties included in this study)
+
+-   `TRACTCE` - Census tract identifier
+
+-   `FLD_ZONE` - Flood zone area identifier
+
+## Construct California-Only Analytic Dataset
 
 ```{r}
+# Create function that recodes survey responses to numeric values
 dv_recode <- function(x){
   case_when(
     x == "Not at all" ~ 0,
@@ -116,19 +166,41 @@ dv_recode <- function(x){
   )
 }
 
+# Final clean data frame
 data_ca_clean <- data_ca %>%
+  
+  # Join with cleaned distance data, by email
   left_join(dist_ca_clean, by = "RecipientEmail") %>%
+  
   mutate(
+    
+    # Boolean variable denoting whether observation received a map treatment
     treat_map = !is.na(exp_emphasis),
+    
+    # Boolean variable denoting whether the image shown was a SLR image
     slr = str_detect(img, "SLR"),
+    
+    # Recode survey responses using function made above
     dv_personal = dv_recode(slharmpersonal),
+    
+    # Flip sign of dist_min so that negative values represent closer to coast/greater risk
     dist_min = ifelse(slr == TRUE, -dist_min, dist_min)
   ) %>%
+  
+  # Remove NA values
   filter(!is.na(dv_personal), !is.na(dist_min))
 
 ```
 
-# Step 1 - Estimate the ATE of California
+**Data Description:** The final clean data frame contains a total of 123 columns, we will not summarize in entirety here. Those that are necessary for our analysis include:
+
+-   `dv_personal`: Survey result, recoded as 0-3 to represent responses "Not at all", "Only a little", "A moderate amount", and "A great deal", respectively, when residents were asked about SLR concern. This is our **outcome variable**.
+-   `treat_map`: Whether treatment was applied (SLR map included in survey). This is our **treatment variable**.
+-   `dist_min`: Minimum distance to SLR boundary. This is our **running variable**.
+
+This data contains 680 observations from California residents. The entire dataset (not used here) containing data from all four states has a sample size of 1,243
+
+## Step 1 - Estimate the ATE of California
 
 ```{r}
 mod_ate <- lm_robust(dv_personal ~ treat_map, se_type = "HC1", data = data_ca_clean)
@@ -136,7 +208,7 @@ summary(mod_ate)
 
 ```
 
-# Step 2 — Recreate Figure 4
+## Step 2 — Create distance bins
 
 ```{r}
 bin_width <- 50
@@ -149,9 +221,10 @@ data_ca_binned <- data_ca_clean %>%
 
 ```
 
-# Step 3 - Estimate treatment effect within each bin
+## Step 3 - Estimate treatment effect within each bin
 
 ```{r}
+#| message: false
 effects_ca <- data_ca_binned %>%
   group_by(dist_bin) %>%
   filter(n() >= 15) %>%
@@ -169,7 +242,7 @@ effects_ca <- data_ca_binned %>%
 
 ```
 
-# Step 4 - Plot California- Only Figure
+## Step 4 - Plot California- Only Figure
 
 ```{r}
 ggplot(effects_ca, aes(x = dist_bin, y = estimate)) +
