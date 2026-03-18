@@ -1,6 +1,6 @@
 ---
 title: "Do Sea‑Level Rise Maps Backfire?"
-subtitle: "Using a randomized experiment to prove causality in the San Fransisco Bay Area"
+subtitle: "Using a randomized experiment to prove causality in the San Francisco Bay Area"
 author: 
 - name: "Joshua Ferrer-Lozano"
 - name: "Zach Loo"
@@ -256,8 +256,12 @@ data_ca_clean |>
     by = treat_map,
     statistic = list(all_continuous() ~ "{mean} ({sd})")) |> 
   modify_header(label ~"**Covariate**") |> 
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**Map Treatment**")
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Map Treatment**") |> 
+  as_gt() |> 
+  gt::opt_interactive(use_compact_mode = TRUE) # Reduce long balance table
 ```
+
+**Covariate Summary**: The covariate balance table compares demographic and geographic features between respondents who received the SLR map treatment and those who did not. Across covariates like race, gender, distance from SLR boundary, etc., the distributions are similar between groups, indicating successful randomization. This balance is essential for this study's causal identification strategy as `dv_personal` can be attributed to the map itself rather than underlying differences between respondents.
 
 **Data Description:** The final clean data frame contains a total of 123 columns, we will not summarize in entirety here. Those that are necessary for our analysis include:
 
@@ -332,9 +336,10 @@ effects_ca <- data_ca_binned %>%
 
 The above code conducts a separate OLS regression of `dv_personal` on `treat_map` with HC1 standard errors for each of the bins. Bins with less than 15 observations are dropped to reduce noise. This should, in theory, test the impact of the map based on the flood zone. For this to work, randomization must be maintained across each bin.
 
-## Step 4 - Plot California- Only Figure
+## Step 4 - Plot California - Only Figure
 
 ```{r}
+#| message: false
 # Replicate Figure 4, only with SF Bay Area data
 ggplot(effects_ca, aes(x = dist_bin, y = estimate)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
