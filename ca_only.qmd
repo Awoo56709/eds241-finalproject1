@@ -52,6 +52,8 @@ The following blog post breaks down the use of a randomized experiment and repli
 
 -   Outcome validity concerns
 
+A full exploration of the study and the accompanying code can be found in our [GitHub repository](https://github.com/sofiasarak/slr-random-experiment-sf).
+
 ## Background
 
 Sea‑level rise (SLR) is one of California’s most pressing climate risks. Yet even in a climate‑aware state, public concern about SLR remains surprisingly low. [Mildenberger et al. (2024)](https://www.nature.com/articles/s41893-024-01380-0) test whether personalized SLR maps increase resident concern by showing how rising seas could affect their home.
