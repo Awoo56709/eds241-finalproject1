@@ -380,7 +380,7 @@ Three key insights emerge from the California analysis:
 ```{r}
 #| echo: false
 #| layout-ncol: 2
-knitr::include_graphics(c("images/figure4.png", "images/figure4_ca.png"))
+knitr::include_graphics(c("images/figure4.png", "images/figure4.png"))
 ```
 
 Comparing Mildenberger et al. (2024)'s results (left) to ours (right) reveals that inside the flood zone (negative distances), California's treatment effect paralleled that of the entire study sample. We can also see that outside of the flood zone (positive distances), Californians' sense of personal harm either didn't change or increased, whereas the backfire effect was stronger in the four-state sample.
